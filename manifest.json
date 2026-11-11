@@ -1,0 +1,18 @@
+{
+  "name": "WorldConnect",
+  "short_name": "WorldConnect",
+  "description": "Amistad y conexiones significativas sin fronteras",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#f7f7fb",
+  "theme_color": "#7048d9",
+  "icons": [
+    {
+      "src": "assets/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
