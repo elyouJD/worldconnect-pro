@@ -75,7 +75,7 @@ async function handle(request,env) {
     const title=String(x.title||"").trim(), network=String(x.network||"").toLowerCase(), target=String(x.url||"");
     if(!title || !["admitad","awin","impact"].includes(network) || !/^https:\/\//i.test(target)) return json({error:"Valid title, network and HTTPS URL required"},400);
     const id=crypto.randomUUID();
-    await dbRequest(env,`affiliateOffers/${id}`,{method:"PATCH",body:JSON.stringify({fields:fields({title,description:String(x.description||"").slice(0,500),network,url:target,active:x.active===true,termsApproved:x.termsApproved===true,createdAt:new Date().toISOString(),createdBy:admin.sub})})});
+    await dbRequest(env,`affiliateOffers/${id}`,{method:"PATCH",body:JSON.stringify({fields:fields({title,description:String(x.description||"").slice(0,500),network,url:target,active:x.active===true && x.termsApproved===true,termsApproved:x.termsApproved===true,createdAt:new Date().toISOString(),createdBy:admin.sub})})});
     return json({id,created:true},201);
   }
   if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/offers/")) {
