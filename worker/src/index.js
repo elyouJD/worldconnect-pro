@@ -102,14 +102,18 @@ async function handle(request,env) {
     try { await dbRequest(env,path,{method:"GET"}); return json(request,{error:"This commission reference was already processed"},409); }
     catch(e) { if(e.status!==404) throw e; }
     const share=Math.floor(net*0.60), platform=net-share, walletPath=`wallets/${uid}`;
-    let wallet={availableCents:0,pendingCents:0,totalEarnedCents:0};
-    try { wallet=decodeDoc(await dbRequest(env,walletPath)); } catch(e) { if(e.status!==404) throw e; }
+    let walletDoc=null, wallet={availableCents:0,pendingCents:0,totalEarnedCents:0};
+    try { walletDoc=await dbRequest(env,walletPath); wallet=decodeDoc(walletDoc); } catch(e) { if(e.status!==404) throw e; }
     const now=new Date().toISOString();
     const token=await googleAccessToken(env);
     const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+    const walletWrite = {
+      update:{name:`${base}/${walletPath}`,fields:fields({availableCents:(wallet.availableCents||0)+share,pendingCents:wallet.pendingCents||0,totalEarnedCents:(wallet.totalEarnedCents||0)+share,updatedAt:now})},
+      currentDocument: walletDoc ? {updateTime:walletDoc.updateTime} : {exists:false}
+    };
     const writes=[
       {update:{name:`${base}/${path}`,fields:fields({uid,externalId,netCommissionCents:net,userShareCents:share,platformShareCents:platform,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}},
-      {update:{name:`${base}/${walletPath}`,fields:fields({availableCents:(wallet.availableCents||0)+share,pendingCents:wallet.pendingCents||0,totalEarnedCents:(wallet.totalEarnedCents||0)+share,updatedAt:now})}},
+      walletWrite,
       {update:{name:`${base}/walletLedger/${id}`,fields:fields({uid,amountCents:share,type:"affiliate_commission",description:"Comisión de afiliación confirmada",externalId,createdAt:now})},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
