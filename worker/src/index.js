@@ -123,12 +123,24 @@ async function handle(request,env) {
     const w=await dbRequest(env,ref);
     const current=decodeDoc(w);
     if(current.status!=="pending") return json(request,{error:"Request is no longer pending"},409);
-    if(x.status==="paid") {
-      const wallet=decodeDoc(await dbRequest(env,`wallets/${uid}`));
-      if((wallet.availableCents||0)<current.amountCents) return json(request,{error:"Insufficient wallet balance"},409);
-      await dbRequest(env,`wallets/${uid}?updateMask.fieldPaths=availableCents&updateMask.fieldPaths=updatedAt`,{method:"PATCH",body:JSON.stringify({fields:fields({availableCents:wallet.availableCents-current.amountCents,updatedAt:new Date().toISOString()})})});
+    const now = new Date().toISOString();
+    const token = await googleAccessToken(env);
+    const base = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+    const writes = [{
+      update: { name: `${base}/${ref}`, fields: fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub}) },
+      currentDocument: { updateTime: w.updateTime }
+    }];
+    if (x.status === "paid") {
+      const walletDoc = await dbRequest(env,`wallets/${uid}`);
+      const wallet = decodeDoc(walletDoc);
+      if ((wallet.availableCents||0) < current.amountCents) return json(request,{error:"Insufficient wallet balance"},409);
+      writes.push({
+        update: { name: `${base}/wallets/${uid}`, fields: fields({availableCents:wallet.availableCents-current.amountCents,updatedAt:now}) },
+        currentDocument: { updateTime: walletDoc.updateTime }
+      });
     }
-    await dbRequest(env,`${ref}?updateMask.fieldPaths=status&updateMask.fieldPaths=reviewedAt&updateMask.fieldPaths=reviewedBy`,{method:"PATCH",body:JSON.stringify({fields:fields({status:x.status,reviewedAt:new Date().toISOString(),reviewedBy:admin.sub})})});
+    const commit = await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
+    if (!commit.ok) return json(request,{error:"Withdrawal review conflicted; refresh and retry"},409);
     return json(request,{updated:true,status:x.status});
   }
   return json(request,{error:"Not found"},404);
