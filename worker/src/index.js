@@ -1,8 +1,14 @@
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
 
 const FIREBASE_KEYS = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
-const corsHeaders = { "Access-Control-Allow-Origin": "*", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS" };
-const json = (data, status=200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders, "Content-Type": "application/json", "Cache-Control": "no-store" } });
+const ALLOWED_ORIGINS = new Set(["https://worldconnect-pro.elyousfij5.workers.dev"]);
+function corsHeaders(request) {
+  const origin = request.headers.get("Origin") || "";
+  const headers = { "Vary": "Origin", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS" };
+  if (ALLOWED_ORIGINS.has(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  return headers;
+}
+const json = (request, data, status=200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders(request), "Content-Type": "application/json", "Cache-Control": "no-store" } });
 const b64url = (bytes) => btoa(String.fromCharCode(...new Uint8Array(bytes))).replace(/=/g,"").replace(/\+/g,"-").replace(/\//g,"_");
 const enc = (s) => new TextEncoder().encode(s);
 function firestoreValue(v) {
@@ -62,35 +68,38 @@ async function listCollection(env,name) {
   return (d.documents||[]).map(x=>({id:x.name.split("/").pop(),...decodeDoc(x)}));
 }
 async function handle(request,env) {
-  if(request.method==="OPTIONS") return new Response(null,{status:204,headers:corsHeaders});
+  if(request.method==="OPTIONS") return new Response(null,{status:204,headers:corsHeaders(request)});
   const url=new URL(request.url);
-  if(url.pathname==="/health") return json({ok:true,service:"worldconnect-earn-api"});
+  if(url.pathname==="/health") return json(request,{ok:true,service:"worldconnect-earn-api"});
   const admin=await adminUser(request,env);
   if(request.method==="GET" && url.pathname==="/api/admin/summary") {
     const [offers,withdrawals]=await Promise.all([listCollection(env,"affiliateOffers"),listCollection(env,"withdrawalRequests")]);
-    return json({offers,withdrawals:withdrawals.filter(x=>x.status==="pending")});
+    return json(request,{offers,withdrawals:withdrawals.filter(x=>x.status==="pending")});
   }
   if(request.method==="POST" && url.pathname==="/api/admin/offers") {
     const x=await request.json();
     const title=String(x.title||"").trim(), network=String(x.network||"").toLowerCase(), target=String(x.url||"");
-    if(!title || !["admitad","awin","impact"].includes(network) || !/^https:\/\//i.test(target)) return json({error:"Valid title, network and HTTPS URL required"},400);
+    if(!title || !["admitad","awin","impact"].includes(network) || !/^https:\/\//i.test(target)) return json(request,{error:"Valid title, network and HTTPS URL required"},400);
     const id=crypto.randomUUID();
     await dbRequest(env,`affiliateOffers/${id}`,{method:"PATCH",body:JSON.stringify({fields:fields({title,description:String(x.description||"").slice(0,500),network,url:target,active:x.active===true && x.termsApproved===true,termsApproved:x.termsApproved===true,createdAt:new Date().toISOString(),createdBy:admin.sub})})});
-    return json({id,created:true},201);
+    return json(request,{id,created:true},201);
   }
   if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/offers/")) {
-    const id=url.pathname.split("/").pop(); if(!/^[A-Za-z0-9_-]{1,120}$/.test(id)) return json({error:"Invalid offer id"},400);
-    const x=await request.json(); const allowed={active: x.active===true};
-    await dbRequest(env,`affiliateOffers/${id}?updateMask.fieldPaths=active`,{method:"PATCH",body:JSON.stringify({fields:fields(allowed)})});
-    return json({updated:true});
+    const id=url.pathname.split("/").pop(); if(!/^[A-Za-z0-9_-]{1,120}$/.test(id)) return json(request,{error:"Invalid offer id"},400);
+    const x=await request.json();
+    const offer=decodeDoc(await dbRequest(env,`affiliateOffers/${id}`));
+    if(x.active===true && offer.termsApproved!==true) return json(request,{error:"Written incentive approval is required before activation"},403);
+    await dbRequest(env,`affiliateOffers/${id}?updateMask.fieldPaths=active`,{method:"PATCH",body:JSON.stringify({fields:fields({active:x.active===true})})});
+    return json(request,{updated:true});
   }
   if(request.method==="POST" && url.pathname==="/api/admin/commissions") {
     const x=await request.json(), uid=String(x.uid||""), externalId=String(x.externalId||"").trim();
     const net=Number(x.netCommissionCents);
-    if(!uid || !externalId || !Number.isSafeInteger(net) || net<1 || net>100000000) return json({error:"uid, externalId and positive netCommissionCents are required"},400);
-    const id=btoa(externalId).replace(/[^A-Za-z0-9_-]/g,"").slice(0,100);
+    if(!uid || !externalId || !Number.isSafeInteger(net) || net<1 || net>100000000) return json(request,{error:"uid, externalId and positive netCommissionCents are required"},400);
+    const digest=await crypto.subtle.digest("SHA-256",new TextEncoder().encode(externalId));
+    const id=[...new Uint8Array(digest)].map(v=>v.toString(16).padStart(2,"0")).join("");
     const path=`commissions/${id}`;
-    try { await dbRequest(env,path,{method:"GET"}); return json({error:"This commission reference was already processed"},409); }
+    try { await dbRequest(env,path,{method:"GET"}); return json(request,{error:"This commission reference was already processed"},409); }
     catch(e) { if(e.status!==404) throw e; }
     const share=Math.floor(net*0.60), platform=net-share, walletPath=`wallets/${uid}`;
     let wallet={availableCents:0,pendingCents:0,totalEarnedCents:0};
@@ -104,24 +113,24 @@ async function handle(request,env) {
       {update:{name:`${base}/walletLedger/${id}`,fields:fields({uid,amountCents:share,type:"affiliate_commission",description:"Comisión de afiliación confirmada",externalId,createdAt:now})},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
-    if(!commit.ok) { const er=await commit.json().catch(()=>({})); return json({error:er.error?.message||"Commission could not be recorded safely"},409); }
-    return json({creditedCents:share,platformCents:platform},201);
+    if(!commit.ok) { const er=await commit.json().catch(()=>({})); return json(request,{error:er.error?.message||"Commission could not be recorded safely"},409); }
+    return json(request,{creditedCents:share,platformCents:platform},201);
   }
   if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/withdrawals/")) {
     const uid=url.pathname.split("/").pop(), x=await request.json();
-    if(!["paid","rejected"].includes(x.status)) return json({error:"Status must be paid or rejected"},400);
+    if(!["paid","rejected"].includes(x.status)) return json(request,{error:"Status must be paid or rejected"},400);
     const ref=`withdrawalRequests/${uid}`;
     const w=await dbRequest(env,ref);
     const current=decodeDoc(w);
-    if(current.status!=="pending") return json({error:"Request is no longer pending"},409);
+    if(current.status!=="pending") return json(request,{error:"Request is no longer pending"},409);
     if(x.status==="paid") {
       const wallet=decodeDoc(await dbRequest(env,`wallets/${uid}`));
-      if((wallet.availableCents||0)<current.amountCents) return json({error:"Insufficient wallet balance"},409);
+      if((wallet.availableCents||0)<current.amountCents) return json(request,{error:"Insufficient wallet balance"},409);
       await dbRequest(env,`wallets/${uid}?updateMask.fieldPaths=availableCents&updateMask.fieldPaths=updatedAt`,{method:"PATCH",body:JSON.stringify({fields:fields({availableCents:wallet.availableCents-current.amountCents,updatedAt:new Date().toISOString()})})});
     }
     await dbRequest(env,`${ref}?updateMask.fieldPaths=status&updateMask.fieldPaths=reviewedAt&updateMask.fieldPaths=reviewedBy`,{method:"PATCH",body:JSON.stringify({fields:fields({status:x.status,reviewedAt:new Date().toISOString(),reviewedBy:admin.sub})})});
-    return json({updated:true,status:x.status});
+    return json(request,{updated:true,status:x.status});
   }
-  return json({error:"Not found"},404);
+  return json(request,{error:"Not found"},404);
 }
-export default { async fetch(request,env) { try { return await handle(request,env); } catch(e) { return json({error:e.message||"Internal error"},e.status||500); } } };
+export default { async fetch(request,env) { try { return await handle(request,env); } catch(e) { return json(request,{error:e.message||"Internal error"},e.status||500); } } };
