@@ -71,8 +71,14 @@ async function adminUser(request, env) {
   return payload;
 }
 async function listCollection(env,name) {
-  const d=await dbRequest(env,`${name}?pageSize=100`);
-  return (d.documents||[]).map(x=>({id:x.name.split("/").pop(),...decodeDoc(x)}));
+  const all=[]; let pageToken="";
+  do {
+    const suffix=pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : "";
+    const d=await dbRequest(env,`${name}?pageSize=100${suffix}`);
+    all.push(...(d.documents||[]).map(x=>({id:x.name.split("/").pop(),...decodeDoc(x)})));
+    pageToken=d.nextPageToken||"";
+  } while(pageToken);
+  return all;
 }
 async function handle(request,env) {
   if(request.method==="OPTIONS") return new Response(null,{status:204,headers:corsHeaders(request)});
@@ -115,8 +121,14 @@ async function handle(request,env) {
   }
   const admin=await adminUser(request,env);
   if(request.method==="GET" && url.pathname==="/api/admin/summary") {
-    const [offers,withdrawals]=await Promise.all([listCollection(env,"affiliateOffers"),listCollection(env,"withdrawalRequests")]);
-    return json(request,{offers,withdrawals:withdrawals.filter(x=>x.status==="pending")});
+    const [offers,withdrawals,commissions]=await Promise.all([listCollection(env,"affiliateOffers"),listCollection(env,"withdrawalRequests"),listCollection(env,"commissions")]);
+    const financials=commissions.reduce((sum,c)=>({
+      commissionCount:sum.commissionCount+1,
+      netCommissionCents:sum.netCommissionCents+Number(c.netCommissionCents||0),
+      userShareCents:sum.userShareCents+Number(c.userShareCents||0),
+      platformShareCents:sum.platformShareCents+Number(c.platformShareCents||0)
+    }),{commissionCount:0,netCommissionCents:0,userShareCents:0,platformShareCents:0});
+    return json(request,{offers,withdrawals:withdrawals.filter(x=>x.status==="pending"),financials});
   }
   if(request.method==="POST" && url.pathname==="/api/admin/offers") {
     const x=await request.json();
