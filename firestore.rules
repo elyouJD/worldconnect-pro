@@ -215,15 +215,10 @@ service cloud.firestore {
       allow create: if signedIn() && request.resource.data.uid == request.auth.uid && request.resource.data.offerId is string && request.resource.data.keys().hasOnly(['uid','offerId','createdAt']);
       allow read: if admin() || (signedIn() && resource.data.uid == request.auth.uid); allow update, delete: if admin();
     }
-    match /withdrawalRequests/{uid} {
-      allow create: if owner(uid) && !exists(/databases/$(database)/documents/withdrawalRequests/$(uid))
-        && request.resource.data.uid == uid && request.resource.data.status == 'pending'
-        && request.resource.data.amountCents is int && request.resource.data.amountCents >= 1000
-        && request.resource.data.amountCents <= get(/databases/$(database)/documents/wallets/$(uid)).data.availableCents
-        && request.resource.data.method in ['bank','paypal'] && request.resource.data.payoutDetails is string
-        && request.resource.data.payoutDetails.size() >= 5 && request.resource.data.payoutDetails.size() <= 160
-        && request.resource.data.keys().hasOnly(['uid','amountCents','method','payoutDetails','status','createdAt']);
-      allow read: if owner(uid) || admin(); allow update, delete: if admin();
+    // Withdrawal requests are created and reviewed only by the authenticated Cloudflare Worker API.
+    // This prevents clients from bypassing balance reservation and request lifecycle checks.
+    match /withdrawalRequests/{requestId} {
+      allow read, create, update, delete: if false;
     }
 
     match /adminAuditLogs/{logId} {
