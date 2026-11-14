@@ -170,10 +170,22 @@ async function handle(request,env) {
     const now=new Date().toISOString(), token=await googleAccessToken(env);
     const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
     const walletFields={pendingWithdrawCents:pending-amount,updatedAt:now};
-    if(x.status==="rejected") walletFields.availableCents=Number(wallet.availableCents||0)+amount;
+    const refunded=x.status==="rejected";
+    if(refunded) walletFields.availableCents=Number(wallet.availableCents||0)+amount;
+    const ledgerId=`withdrawal_${id}`;
+    const ledgerEntry={
+      uid:current.uid,
+      amountCents:refunded?amount:-amount,
+      type:refunded?"withdrawal_refund":"withdrawal_paid",
+      description:refunded?"Reembolso de retirada rechazada":"Retirada pagada manualmente",
+      withdrawalId:id,
+      createdAt:now,
+      createdBy:admin.sub
+    };
     const writes=[
       {update:{name:`${base}/${ref}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:w.updateTime}},
-      {update:{name:`${base}/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}}
+      {update:{name:`${base}/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}},
+      {update:{name:`${base}/walletLedger/${ledgerId}`,fields:fields(ledgerEntry)},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) return json(request,{error:"Withdrawal review conflicted; refresh and retry"},409);
