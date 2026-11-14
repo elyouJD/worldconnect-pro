@@ -82,11 +82,17 @@ async function handle(request,env) {
     const user=await verifiedUser(request,env);
     const token=await googleAccessToken(env);
     const endpoint=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`;
-    const query={structuredQuery:{from:[{collectionId:"withdrawalRequests"}],where:{fieldFilter:{field:{fieldPath:"uid"},op:"EQUAL",value:{stringValue:user.sub}}},orderBy:[{field:{fieldPath:"createdAt"},direction:"DESCENDING"}],limit:50}};
+    const query={structuredQuery:{from:[{collectionId:"withdrawalRequests"}],where:{fieldFilter:{field:{fieldPath:"uid"},op:"EQUAL",value:{stringValue:user.sub}}},limit:50}};
     const r=await fetch(endpoint,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify(query)});
     const rows=await r.json().catch(()=>[]);
-    if(!r.ok) return json(request,{error:"Could not load withdrawal history"},r.status);
-    return json(request,{withdrawals:(rows||[]).filter(x=>x.document).map(x=>({id:x.document.name.split("/").pop(),...decodeDoc(x.document)}))});
+    if(!r.ok) {
+      const detail = rows?.error?.message || "Firestore query failed";
+      console.error("STAGING WITHDRAWALS QUERY ERROR:", r.status, detail);
+      return json(request,{error:"Could not load withdrawal history",details:detail},r.status);
+    }
+    const withdrawals=(rows||[]).filter(x=>x.document).map(x=>({id:x.document.name.split("/").pop(),...decodeDoc(x.document)}));
+    withdrawals.sort((a,b)=>String(b.createdAt||"").localeCompare(String(a.createdAt||"")));
+    return json(request,{withdrawals});
   }
   if(request.method==="POST" && url.pathname==="/api/withdrawals") {
     const user=await verifiedUser(request,env);
