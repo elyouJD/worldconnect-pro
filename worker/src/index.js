@@ -61,7 +61,7 @@ async function dbRequest(env, path, options={}) {
   return body;
 }
 async function verifiedUser(request, env) {
-  const token=request.headers.get("Authorization")?.replace(/^Bearer\\s+/i,"");
+  const token=request.headers.get("Authorization")?.replace(/^Bearer\s+/i,"");
   if(!token) throw Object.assign(new Error("Authentication required"),{status:401});
   const {payload}=await jwtVerify(token,FIREBASE_KEYS,{issuer:`https://securetoken.google.com/${env.FIREBASE_PROJECT_ID}`,audience:env.FIREBASE_PROJECT_ID});
   return payload;
