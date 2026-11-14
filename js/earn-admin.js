@@ -18,6 +18,20 @@ async function refresh(){
  status.textContent='Cargando…';
  try{
   const data=await api('/api/admin/summary');
+  let finance=$('earn-admin-financials');
+  if(!finance){
+   finance=document.createElement('section');
+   finance.id='earn-admin-financials';
+   finance.className='earn-summary';
+   status.insertAdjacentElement('afterend',finance);
+  }
+  const f=data.financials||{};
+  finance.innerHTML=[
+   ['Comisiones netas',money(f.netCommissionCents)],
+   ['Recompensas usuarios (60 %)',money(f.userShareCents)],
+   ['Ingresos plataforma (40 %)',money(f.platformShareCents)],
+   ['Comisiones registradas',String(Number(f.commissionCount)||0)]
+  ].map(([label,value])=>'<div class="panel"><small>'+label+'</small><strong>'+esc(value)+'</strong></div>').join('');
   $('earn-admin-offers').innerHTML=(data.offers||[]).map(o=>'<div class="earn-ledger-row"><span><b>'+esc(o.title)+'</b> · '+esc(o.network)+' · '+(o.active?'Activa':'Inactiva')+' · aprobación: '+(o.termsApproved?'sí':'no')+'</span><button class="outline" data-toggle-offer="'+esc(o.id)+'" data-active="'+(!o.active)+'">'+(o.active?'Desactivar':'Activar')+'</button></div>').join('')||'<p class="muted">No hay ofertas.</p>';
   $('earn-admin-withdrawals').innerHTML=(data.withdrawals||[]).map(w=>'<div class="earn-ledger-row"><span>'+esc(w.uid)+' · '+money(w.amountCents)+' · '+esc(w.method)+' · '+esc(w.payoutDetails)+'</span><span><button class="outline" data-withdraw="'+esc(w.id)+'" data-status="paid">Marcar pagada</button> <button class="outline" data-withdraw="'+esc(w.id)+'" data-status="rejected">Rechazar</button></span></div>').join('')||'<p class="muted">No hay solicitudes pendientes.</p>';
   status.textContent='Panel conectado. '+(data.offers||[]).length+' ofertas; '+(data.withdrawals||[]).length+' retiradas pendientes.';
