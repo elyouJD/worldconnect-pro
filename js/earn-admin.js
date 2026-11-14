@@ -19,7 +19,7 @@ async function refresh(){
  try{
   const data=await api('/api/admin/summary');
   $('earn-admin-offers').innerHTML=(data.offers||[]).map(o=>'<div class="earn-ledger-row"><span><b>'+esc(o.title)+'</b> · '+esc(o.network)+' · '+(o.active?'Activa':'Inactiva')+' · aprobación: '+(o.termsApproved?'sí':'no')+'</span><button class="outline" data-toggle-offer="'+esc(o.id)+'" data-active="'+(!o.active)+'">'+(o.active?'Desactivar':'Activar')+'</button></div>').join('')||'<p class="muted">No hay ofertas.</p>';
-  $('earn-admin-withdrawals').innerHTML=(data.withdrawals||[]).map(w=>'<div class="earn-ledger-row"><span>'+esc(w.uid)+' · '+money(w.amountCents)+' · '+esc(w.method)+' · '+esc(w.payoutDetails)+'</span><span><button class="outline" data-withdraw="'+esc(w.uid)+'" data-status="paid">Marcar pagada</button> <button class="outline" data-withdraw="'+esc(w.uid)+'" data-status="rejected">Rechazar</button></span></div>').join('')||'<p class="muted">No hay solicitudes pendientes.</p>';
+  $('earn-admin-withdrawals').innerHTML=(data.withdrawals||[]).map(w=>'<div class="earn-ledger-row"><span>'+esc(w.uid)+' · '+money(w.amountCents)+' · '+esc(w.method)+' · '+esc(w.payoutDetails)+'</span><span><button class="outline" data-withdraw="'+esc(w.id)+'" data-status="paid">Marcar pagada</button> <button class="outline" data-withdraw="'+esc(w.uid)+'" data-status="rejected">Rechazar</button></span></div>').join('')||'<p class="muted">No hay solicitudes pendientes.</p>';
   status.textContent='Panel conectado. '+(data.offers||[]).length+' ofertas; '+(data.withdrawals||[]).length+' retiradas pendientes.';
  }catch(e){status.textContent=e.message;}
 }
