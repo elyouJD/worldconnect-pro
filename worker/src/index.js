@@ -106,8 +106,8 @@ async function handle(request,env) {
     const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
     const token=await googleAccessToken(env);
     const writes=[
-      {update:{name:`${base}/withdrawalRequests/${id}`,fields:fields({uid:user.sub,amountCents:amount,method,payoutDetails:details,status:"pending",createdAt:now})},currentDocument:{exists:false}},
-      {update:{name:`${base}/${walletPath}`,fields:fields({availableCents:available-amount,pendingWithdrawCents:Number(wallet.pendingWithdrawCents||0)+amount,updatedAt:now})},updateMask:{fieldPaths:["availableCents","pendingWithdrawCents","updatedAt"]},currentDocument:{updateTime:walletDoc.updateTime}}
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/withdrawalRequests/${id}`,fields:fields({uid:user.sub,amountCents:amount,method,payoutDetails:details,status:"pending",createdAt:now})},currentDocument:{exists:false}},
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields({availableCents:available-amount,pendingWithdrawCents:Number(wallet.pendingWithdrawCents||0)+amount,updatedAt:now})},updateMask:{fieldPaths:["availableCents","pendingWithdrawCents","updatedAt"]},currentDocument:{updateTime:walletDoc.updateTime}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) return json(request,{error:"Balance changed or request conflicted. Refresh and try again."},409);
@@ -150,13 +150,13 @@ async function handle(request,env) {
     const token=await googleAccessToken(env);
     const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
     const walletWrite = {
-      update:{name:`${base}/${walletPath}`,fields:fields({availableCents:(wallet.availableCents||0)+share,pendingCents:wallet.pendingCents||0,totalEarnedCents:(wallet.totalEarnedCents||0)+share,updatedAt:now})},
+      update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields({availableCents:(wallet.availableCents||0)+share,pendingCents:wallet.pendingCents||0,totalEarnedCents:(wallet.totalEarnedCents||0)+share,updatedAt:now})},
       currentDocument: walletDoc ? {updateTime:walletDoc.updateTime} : {exists:false}
     };
     const writes=[
-      {update:{name:`${base}/${path}`,fields:fields({uid,externalId,netCommissionCents:net,userShareCents:share,platformShareCents:platform,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}},
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}`,fields:fields({uid,externalId,netCommissionCents:net,userShareCents:share,platformShareCents:platform,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}},
       walletWrite,
-      {update:{name:`${base}/walletLedger/${id}`,fields:fields({uid,amountCents:share,type:"affiliate_commission",description:"Comisión de afiliación confirmada",externalId,createdAt:now})},currentDocument:{exists:false}}
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/walletLedger/${id}`,fields:fields({uid,amountCents:share,type:"affiliate_commission",description:"Comisión de afiliación confirmada",externalId,createdAt:now})},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) { const er=await commit.json().catch(()=>({})); return json(request,{error:er.error?.message||"Commission could not be recorded safely"},409); }
@@ -186,9 +186,9 @@ async function handle(request,env) {
       createdBy:admin.sub
     };
     const writes=[
-      {update:{name:`${base}/${ref}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:w.updateTime}},
-      {update:{name:`${base}/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}},
-      {update:{name:`${base}/walletLedger/${ledgerId}`,fields:fields(ledgerEntry)},currentDocument:{exists:false}}
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${ref}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:w.updateTime}},
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}},
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/walletLedger/${ledgerId}`,fields:fields(ledgerEntry)},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) return json(request,{error:"Withdrawal review conflicted; refresh and retry"},409);
