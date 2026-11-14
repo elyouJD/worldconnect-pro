@@ -1,4 +1,4 @@
-const CACHE = "worldconnect-shell-v13";
+const CACHE = "worldconnect-shell-v14";
 const SHELL = ["./", "./index.html", "./css/styles.css", "./js/app.js", "./manifest.json"];
 
 self.addEventListener("install", event => {
