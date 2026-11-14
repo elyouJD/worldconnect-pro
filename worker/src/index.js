@@ -60,10 +60,14 @@ async function dbRequest(env, path, options={}) {
   if(!r.ok) { const e=new Error(body.error?.message||"Firestore request failed"); e.status=r.status; throw e; }
   return body;
 }
-async function adminUser(request, env) {
-  const token=request.headers.get("Authorization")?.replace(/^Bearer\s+/i,"");
+async function verifiedUser(request, env) {
+  const token=request.headers.get("Authorization")?.replace(/^Bearer\\s+/i,"");
   if(!token) throw Object.assign(new Error("Authentication required"),{status:401});
   const {payload}=await jwtVerify(token,FIREBASE_KEYS,{issuer:`https://securetoken.google.com/${env.FIREBASE_PROJECT_ID}`,audience:env.FIREBASE_PROJECT_ID});
+  return payload;
+}
+async function adminUser(request, env) {
+  const payload=await verifiedUser(request,env);
   if(payload.admin!==true) throw Object.assign(new Error("Administrator permission required"),{status:403});
   const allowed=(env.ADMIN_UIDS||"").split(",").map(x=>x.trim()).filter(Boolean);
   if(allowed.length && !allowed.includes(payload.sub)) throw Object.assign(new Error("UID is not in ADMIN_UIDS"),{status:403});
@@ -77,6 +81,25 @@ async function handle(request,env) {
   if(request.method==="OPTIONS") return new Response(null,{status:204,headers:corsHeaders(request)});
   const url=new URL(request.url);
   if(url.pathname==="/health") return json(request,{ok:true,service:"worldconnect-earn-api"});
+  if(request.method==="POST" && url.pathname==="/api/withdrawals") {
+    const user=await verifiedUser(request,env);
+    const x=await request.json();
+    const amount=Number(x.amountCents), method=String(x.method||""), details=String(x.payoutDetails||"").trim();
+    if(!Number.isSafeInteger(amount) || amount<1000 || amount>100000000 || !["bank","paypal"].includes(method) || details.length<5 || details.length>160) return json(request,{error:"Valid amount (minimum 10 EUR), payout method and details are required"},400);
+    const walletPath=`wallets/${user.sub}`, walletDoc=await dbRequest(env,walletPath), wallet=decodeDoc(walletDoc);
+    const available=Number(wallet.availableCents||0);
+    if(available<amount) return json(request,{error:"Insufficient available balance"},409);
+    const id=crypto.randomUUID(), now=new Date().toISOString();
+    const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+    const token=await googleAccessToken(env);
+    const writes=[
+      {update:{name:`${base}/withdrawalRequests/${id}`,fields:fields({uid:user.sub,amountCents:amount,method,payoutDetails:details,status:"pending",createdAt:now})},currentDocument:{exists:false}},
+      {update:{name:`${base}/${walletPath}`,fields:fields({availableCents:available-amount,pendingWithdrawCents:Number(wallet.pendingWithdrawCents||0)+amount,updatedAt:now})},updateMask:{fieldPaths:["availableCents","pendingWithdrawCents","updatedAt"]},currentDocument:{updateTime:walletDoc.updateTime}}
+    ];
+    const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
+    if(!commit.ok) return json(request,{error:"Balance changed or request conflicted. Refresh and try again."},409);
+    return json(request,{created:true,id,availableCents:available-amount},201);
+  }
   const admin=await adminUser(request,env);
   if(request.method==="GET" && url.pathname==="/api/admin/summary") {
     const [offers,withdrawals]=await Promise.all([listCollection(env,"affiliateOffers"),listCollection(env,"withdrawalRequests")]);
@@ -127,30 +150,23 @@ async function handle(request,env) {
     return json(request,{creditedCents:share,platformCents:platform},201);
   }
   if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/withdrawals/")) {
-    const uid=url.pathname.split("/").pop(), x=await request.json();
-    if(!["paid","rejected"].includes(x.status)) return json(request,{error:"Status must be paid or rejected"},400);
-    const ref=`withdrawalRequests/${uid}`;
-    const w=await dbRequest(env,ref);
-    const current=decodeDoc(w);
+    const id=url.pathname.split("/").pop(), x=await request.json();
+    if(!/^[A-Za-z0-9_-]{1,120}$/.test(id) || !["paid","rejected"].includes(x.status)) return json(request,{error:"Invalid request id or status"},400);
+    const ref=`withdrawalRequests/${id}`, w=await dbRequest(env,ref), current=decodeDoc(w);
     if(current.status!=="pending") return json(request,{error:"Request is no longer pending"},409);
-    const now = new Date().toISOString();
-    const token = await googleAccessToken(env);
-    const base = `https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
-    const writes = [{
-      update: { name: `${base}/${ref}`, fields: fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub}) },
-      currentDocument: { updateTime: w.updateTime }
-    }];
-    if (x.status === "paid") {
-      const walletDoc = await dbRequest(env,`wallets/${uid}`);
-      const wallet = decodeDoc(walletDoc);
-      if ((wallet.availableCents||0) < current.amountCents) return json(request,{error:"Insufficient wallet balance"},409);
-      writes.push({
-        update: { name: `${base}/wallets/${uid}`, fields: fields({availableCents:wallet.availableCents-current.amountCents,updatedAt:now}) },
-        currentDocument: { updateTime: walletDoc.updateTime }
-      });
-    }
-    const commit = await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
-    if (!commit.ok) return json(request,{error:"Withdrawal review conflicted; refresh and retry"},409);
+    const walletPath=`wallets/${current.uid}`, walletDoc=await dbRequest(env,walletPath), wallet=decodeDoc(walletDoc);
+    const amount=Number(current.amountCents||0), pending=Number(wallet.pendingWithdrawCents||0);
+    if(amount<1 || pending<amount) return json(request,{error:"Reserved wallet balance is inconsistent; manual review required"},409);
+    const now=new Date().toISOString(), token=await googleAccessToken(env);
+    const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+    const walletFields={pendingWithdrawCents:pending-amount,updatedAt:now};
+    if(x.status==="rejected") walletFields.availableCents=Number(wallet.availableCents||0)+amount;
+    const writes=[
+      {update:{name:`${base}/${ref}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:w.updateTime}},
+      {update:{name:`${base}/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}}
+    ];
+    const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
+    if(!commit.ok) return json(request,{error:"Withdrawal review conflicted; refresh and retry"},409);
     return json(request,{updated:true,status:x.status});
   }
   return json(request,{error:"Not found"},404);
