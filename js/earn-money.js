@@ -8,7 +8,7 @@ function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&l
 async function loadEarnMoney(user){
  activeUid=user.uid;
  const ws=await getDoc(doc(db,'wallets',user.uid)); const w=ws.exists()?ws.data():{};
- $('earn-available').textContent=euro(w.availableCents); $('earn-pending').textContent=euro(w.pendingCents); $('earn-total').textContent=euro(w.totalEarnedCents);
+ $('earn-available').textContent=euro(w.availableCents); $('earn-pending').textContent=euro((Number(w.pendingCents)||0)+(Number(w.pendingWithdrawCents)||0)); $('earn-total').textContent=euro(w.totalEarnedCents);
  const ls=await getDocs(query(collection(db,'walletLedger'),where('uid','==',user.uid)));
  const rows=ls.docs.map(d=>d.data()).sort((a,b)=>(b.createdAt?.toMillis?.()||0)-(a.createdAt?.toMillis?.()||0));
  $('earn-ledger').innerHTML=rows.length?rows.map(x=>'<div class="earn-ledger-row"><span>'+esc(x.description||'Recompensa')+'</span><b>'+euro(x.amountCents)+'</b></div>').join(''):'<p class="muted">Todavía no hay movimientos.</p>';
