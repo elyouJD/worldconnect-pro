@@ -1,1 +1,26 @@
-const CACHE="worldconnect-shell-v11";const SHELL=["./","./index.html","./css/styles.css","./js/app.js","./manifest.json"];self.addEventListener("install",e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(SHELL))));self.addEventListener("activate",e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k))))));self.addEventListener("fetch",e=>{if(e.request.method!=="GET"||new URL(e.request.url).origin!==location.origin)return;e.respondWith(fetch(e.request).then(r=>{if(r.ok&&(e.request.mode==="navigate"||SHELL.some(p=>new URL(p,location).pathname===new URL(e.request.url).pathname)))caches.open(CACHE).then(c=>c.put(e.request,r.clone()));return r}).catch(()=>caches.match(e.request).then(r=>r||caches.match("./index.html"))))});
+const CACHE = "worldconnect-shell-v15";
+const SHELL = ["./", "./index.html", "./css/styles.css", "./js/app.js", "./manifest.json"];
+
+self.addEventListener("install", event => {
+  event.waitUntil(
+    caches.open(CACHE)
+      .then(cache => cache.addAll(SHELL))
+      .catch(error => console.error("WorldConnect: shell cache failed", error))
+  );
+  self.skipWaiting();
+});
+
+self.addEventListener("activate", event => {
+  event.waitUntil(
+    caches.keys()
+      .then(keys => Promise.all(
+        keys.filter(key => key.startsWith("worldconnect-shell-") && key !== CACHE)
+          .map(key => caches.delete(key))
+      ))
+      .then(() => self.clients.claim())
+  );
+});
+
+// Runtime fetch interception is intentionally disabled for now.
+// This avoids reusing or cloning already-consumed response bodies.
+// The browser will request application resources directly from the network.
