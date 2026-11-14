@@ -1,7 +1,13 @@
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
 
 const FIREBASE_KEYS = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
-const ALLOWED_ORIGINS = new Set(["https://worldconnect-pro.elyousfij5.workers.dev"]);
+const ALLOWED_ORIGINS = new Set([
+  "https://worldconnect-pro.elyousfij5.workers.dev",
+  "http://localhost:5500",
+  "http://127.0.0.1:5500",
+  "http://localhost:3000",
+  "http://127.0.0.1:3000"
+]);
 function corsHeaders(request) {
   const origin = request.headers.get("Origin") || "";
   const headers = { "Vary": "Origin", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS" };
