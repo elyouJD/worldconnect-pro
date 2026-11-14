@@ -81,6 +81,16 @@ async function handle(request,env) {
   if(request.method==="OPTIONS") return new Response(null,{status:204,headers:corsHeaders(request)});
   const url=new URL(request.url);
   if(url.pathname==="/health") return json(request,{ok:true,service:"worldconnect-earn-api"});
+  if(request.method==="GET" && url.pathname==="/api/withdrawals") {
+    const user=await verifiedUser(request,env);
+    const token=await googleAccessToken(env);
+    const endpoint=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents:runQuery`;
+    const query={structuredQuery:{from:[{collectionId:"withdrawalRequests"}],where:{fieldFilter:{field:{fieldPath:"uid"},op:"EQUAL",value:{stringValue:user.sub}}},orderBy:[{field:{fieldPath:"createdAt"},direction:"DESCENDING"}],limit:50}};
+    const r=await fetch(endpoint,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify(query)});
+    const rows=await r.json().catch(()=>[]);
+    if(!r.ok) return json(request,{error:"Could not load withdrawal history"},r.status);
+    return json(request,{withdrawals:(rows||[]).filter(x=>x.document).map(x=>({id:x.document.name.split("/").pop(),...decodeDoc(x.document)}))});
+  }
   if(request.method==="POST" && url.pathname==="/api/withdrawals") {
     const user=await verifiedUser(request,env);
     const x=await request.json();
