@@ -216,25 +216,26 @@ async function handle(request,env) {
   }
   if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/platform-withdrawals/")) {
     const id=url.pathname.split("/").pop(), x=await request.json();
-    if(!/^[A-Za-z0-9_-]{1,120}$/.test(id) || !["paid","rejected"].includes(x.status)) return json(request,{error:"Invalid request id or status"},400);
+    const status=String(x.status||x.action||"").trim().toLowerCase();
+    if(!/^[A-Za-z0-9_-]{1,120}$/.test(id) || !["paid","rejected"].includes(status)) return json(request,{error:"Invalid platform withdrawal request id or status",details:{validId:/^[A-Za-z0-9_-]{1,120}$/.test(id),receivedStatus:status||null}},400);
     const ref=`platformWithdrawalRequests/${id}`, w=await dbRequest(env,ref), current=decodeDoc(w);
     if(current.status!=="pending") return json(request,{error:"Platform withdrawal is no longer pending"},409);
     const walletPath="platformWallet/main", walletDoc=await dbRequest(env,walletPath), wallet=decodeDoc(walletDoc);
     const amount=Number(current.amountCents||0), pending=Number(wallet.pendingWithdrawCents||0);
     if(amount<1 || pending<amount) return json(request,{error:"Reserved platform balance is inconsistent; manual review required"},409);
     const now=new Date().toISOString(), token=await googleAccessToken(env), base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
-    const rejected=x.status==="rejected";
+    const rejected=status==="rejected";
     const walletFields={pendingWithdrawCents:pending-amount,updatedAt:now};
     if(rejected) walletFields.availableCents=Number(wallet.availableCents||0)+amount;
     const ledgerId=`platform_withdrawal_review_${id}`;
     const writes=[
-      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${ref}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:w.updateTime}},
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${ref}`,fields:fields({status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:w.updateTime}},
       {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}},
       {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/platformLedger/${ledgerId}`,fields:fields({amountCents:rejected?amount:0,type:rejected?"platform_withdrawal_refund":"platform_withdrawal_paid",description:rejected?"Reembolso de retirada de plataforma rechazada":"Retirada de plataforma pagada manualmente",withdrawalId:id,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) return json(request,{error:"Platform withdrawal review conflicted; refresh and retry"},409);
-    return json(request,{updated:true,status:x.status});
+    return json(request,{updated:true,status});
   }
   if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/withdrawals/")) {
     const id=url.pathname.split("/").pop(), x=await request.json();
