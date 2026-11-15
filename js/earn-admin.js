@@ -49,6 +49,6 @@ document.addEventListener('click',async e=>{
  const w=e.target.closest('[data-withdraw]'); if(w){if(!confirm('¿Confirmas que has realizado la transferencia antes de marcarla pagada?'))return;try{await api('/api/admin/withdrawals/'+encodeURIComponent(w.dataset.withdraw),{method:'PATCH',body:JSON.stringify({status:w.dataset.status})});await refresh();}catch(x){alert(x.message);}}
 });
 document.addEventListener('click',async e=>{const pw=e.target.closest('[data-platform-withdraw]');if(!pw)return;if(pw.dataset.status==='paid'&&!confirm('Simulación: marcar como pagada. No se envía dinero.'))return;try{await api('/api/admin/platform-withdrawals/'+encodeURIComponent(pw.dataset.platformWithdraw),{method:'PATCH',body:JSON.stringify({status:pw.dataset.status})});await refresh();}catch(x){alert(x.message);}});
-$('earn-admin-refresh')?.addEventListener('click',refresh);
+['earn-admin-refresh','earn-admin-finances-refresh'].forEach(id=>$(id)?.addEventListener('click',refresh));
 onAuthStateChanged(auth,user=>{if(user&&(location.hash==='#admin'||location.hash==='#admin-finances'))refresh();});
 window.addEventListener('hashchange',()=>{if((location.hash==='#admin'||location.hash==='#admin-finances')&&auth.currentUser)refresh();});
