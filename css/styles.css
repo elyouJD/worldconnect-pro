@@ -276,3 +276,6 @@ main, .content, .page, .chat, .chat-window, .feed-post,
   .chat { min-height: 560px; }
   .messages { max-height: 58vh; }
 }
+
+/* Earn Money MVP */
+.earn-summary{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:16px;margin:18px 0}.earn-summary .panel{display:flex;flex-direction:column;gap:8px}.earn-summary strong{font-size:1.7rem;color:var(--primary,#7048d9)}.earn-panel{margin:16px 0;padding:22px}.earn-panel h3{margin-top:0}.earn-offers{display:grid;gap:12px}.earn-offer{display:flex;justify-content:space-between;align-items:center;gap:14px;padding:14px;border:1px solid var(--border,#e8e4f2);border-radius:12px}.earn-offer p{margin:4px 0}.earn-ledger-row{display:flex;justify-content:space-between;gap:12px;padding:12px 0;border-bottom:1px solid var(--border,#e8e4f2)}#earn-withdraw-form{display:grid;gap:12px;max-width:520px}#earn-withdraw-form label{display:grid;gap:6px}#earn-withdraw-form input,#earn-withdraw-form select{padding:11px;border:1px solid var(--border,#ddd);border-radius:8px}@media(max-width:700px){.earn-summary{grid-template-columns:1fr}.earn-offer{align-items:flex-start;flex-direction:column}}

@@ -1,0 +1,8 @@
+name = "worldconnect-earn-api"
+main = "src/index.js"
+compatibility_date = "2026-11-13"
+workers_dev = true
+
+[vars]
+FIREBASE_PROJECT_ID = "worldconnect-c3e86"
+# Set ADMIN_UIDS as a comma-separated secret/variable. Never commit service-account keys.
