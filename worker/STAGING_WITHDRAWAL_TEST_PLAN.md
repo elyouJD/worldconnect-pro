@@ -1,7 +1,7 @@
 # WorldConnect Staging — withdrawal simulation test plan
 
 ## Scope
-This plan is for the isolated `worldconnect-staging` Firebase project and the `worldconnect-earn-api-staging` Worker. It does not authorize production deployment or real transfers.
+This plan is a future staging-only simulation plan. It does not authorize changes to Firebase, Cloudflare, deployment, production data, or real transfers. No external environment should be changed until the user explicitly approves that separate step.
 
 ## Preconditions
 - Configure the staging web app's Firebase Web SDK values in `js/firebase-config.js` (Firebase Console → Project settings → Your apps → SDK setup and configuration). Do not reuse production apiKey/appId values.
