@@ -21,7 +21,7 @@ Set `FIREBASE_PROJECT_ID` in `wrangler.toml` to the exact Firebase project ID. T
 ## API
 All routes except `/health` require a Firebase ID token in `Authorization: Bearer <idToken>`, the `admin: true` custom claim, and an allowed UID.
 
-- `GET /api/admin/summary`: active/inactive offers and pending withdrawal requests.
+- `GET /api/admin/summary`: active/inactive offers, pending user withdrawals, platform wallet balance, pending platform withdrawals, and 60/40 commission totals.
 - `POST /api/admin/offers`: create an offer. Body: `{ "title":"...", "description":"...", "network":"admitad|awin|impact", "url":"https://...", "active":false, "termsApproved":false }`. Offers default to inactive unless explicitly enabled and marked terms-approved.
 - `PATCH /api/admin/offers/:id`: set `{ "active": true|false }`.
 - `POST /api/admin/commissions`: manually reconcile a received commission. Body: `{ "uid":"FIREBASE_UID", "externalId":"unique-network-transaction-id", "netCommissionCents":1000 }`. User share is 60%; platform share is 40%. A duplicate external reference is rejected.
@@ -32,3 +32,4 @@ The commission endpoint uses a create-only commission record and a Firestore com
 
 ## Payout methods
 The app supports bank transfer (SEPA/IBAN) and PayPal as request methods. Payout execution is manual by an authorized operator. Store only the minimum payout details, restrict dashboard access, define retention/deletion periods, and complete GDPR, tax, KYC/AML and payment-provider checks before launch.
+\n## Staging test run\n\nFollow [STAGING_WITHDRAWAL_TEST_PLAN.md](./STAGING_WITHDRAWAL_TEST_PLAN.md). All payout details in staging must be synthetic. The UI's simulated paid action does not initiate a bank transfer.\n
