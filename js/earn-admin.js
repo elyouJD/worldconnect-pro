@@ -14,8 +14,8 @@ async function api(path,options={}) {
 function money(c){return new Intl.NumberFormat('es-ES',{style:'currency',currency:'EUR'}).format((Number(c)||0)/100);}
 function esc(s){return String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
 async function refresh(){
- const status=$('earn-admin-status'); if(!status)return;
- status.textContent='Cargando…';
+ const status=$('earn-admin-status');
+ if(status) status.textContent='Cargando…';
  try{
   const data=await api('/api/admin/summary');
   let finance=$('earn-admin-financials');
@@ -23,7 +23,8 @@ async function refresh(){
    finance=document.createElement('section');
    finance.id='earn-admin-financials';
    finance.className='earn-summary';
-   status.insertAdjacentElement('afterend',finance);
+   const anchor=status||$('page-admin-finances');
+   if(anchor) anchor.insertAdjacentElement(status?'afterend':'beforeend',finance);
   }
   const f=data.financials||{};
   finance.innerHTML=[
@@ -35,9 +36,9 @@ async function refresh(){
   const pw=data.platformWallet||{};
   const platformBalance=$('earn-admin-platform-balance'); if(platformBalance) platformBalance.innerHTML=[['Disponible',money(pw.availableCents)],['Reservado',money(pw.pendingWithdrawCents)],['Total acumulado',money(pw.totalEarnedCents)]].map(([label,value])=>'<div class="panel"><small>'+label+'</small><strong>'+esc(value)+'</strong></div>').join('');
   const platformRequests=$('earn-admin-platform-withdrawals'); if(platformRequests) platformRequests.innerHTML=(data.platformWithdrawals||[]).map(w=>'<div class="earn-ledger-row"><span>'+money(w.amountCents)+' · '+esc(w.method)+' · '+esc(w.payoutDetails)+'</span><span><button class="outline" data-platform-withdraw="'+esc(w.id)+'" data-status="paid">Confirmar transferencia realizada</button> <button class="outline" data-platform-withdraw="'+esc(w.id)+'" data-status="rejected">Rechazar</button></span></div>').join('')||'<p class="muted">No hay solicitudes de plataforma pendientes.</p>';
-  $('earn-admin-offers').innerHTML=(data.offers||[]).map(o=>'<div class="earn-ledger-row"><span><b>'+esc(o.title)+'</b> · '+esc(o.network)+' · '+(o.active?'Activa':'Inactiva')+' · aprobación: '+(o.termsApproved?'sí':'no')+'</span><button class="outline" data-toggle-offer="'+esc(o.id)+'" data-active="'+(!o.active)+'">'+(o.active?'Desactivar':'Activar')+'</button></div>').join('')||'<p class="muted">No hay ofertas.</p>';
-  $('earn-admin-withdrawals').innerHTML=(data.withdrawals||[]).map(w=>'<div class="earn-ledger-row"><span>'+esc(w.uid)+' · '+money(w.amountCents)+' · '+esc(w.method)+' · '+esc(w.payoutDetails)+'</span><span><button class="outline" data-withdraw="'+esc(w.id)+'" data-status="paid">Marcar pagada</button> <button class="outline" data-withdraw="'+esc(w.id)+'" data-status="rejected">Rechazar</button></span></div>').join('')||'<p class="muted">No hay solicitudes pendientes.</p>';
-  status.textContent='Panel conectado. '+(data.offers||[]).length+' ofertas; '+(data.withdrawals||[]).length+' retiradas pendientes.';
+  const offersEl=$('earn-admin-offers'); if(offersEl) offersEl.innerHTML=(data.offers||[]).map(o=>'<div class="earn-ledger-row"><span><b>'+esc(o.title)+'</b> · '+esc(o.network)+' · '+(o.active?'Activa':'Inactiva')+' · aprobación: '+(o.termsApproved?'sí':'no')+'</span><button class="outline" data-toggle-offer="'+esc(o.id)+'" data-active="'+(!o.active)+'">'+(o.active?'Desactivar':'Activar')+'</button></div>').join('')||'<p class="muted">No hay ofertas.</p>';
+  const userRequests=$('earn-admin-withdrawals'); if(userRequests) userRequests.innerHTML=(data.withdrawals||[]).map(w=>'<div class="earn-ledger-row"><span>'+esc(w.uid)+' · '+money(w.amountCents)+' · '+esc(w.method)+' · '+esc(w.payoutDetails)+'</span><span><button class="outline" data-withdraw="'+esc(w.id)+'" data-status="paid">Marcar pagada</button> <button class="outline" data-withdraw="'+esc(w.id)+'" data-status="rejected">Rechazar</button></span></div>').join('')||'<p class="muted">No hay solicitudes pendientes.</p>';
+  if(status) status.textContent='Panel conectado. '+(data.offers||[]).length+' ofertas; '+(data.withdrawals||[]).length+' retiradas pendientes.';
  }catch(e){status.textContent=e.message;}
 }
 $('earn-admin-offer-form')?.addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/admin/offers',{method:'POST',body:JSON.stringify({title:$('earn-admin-title').value,description:$('earn-admin-description').value,network:$('earn-admin-network').value,url:$('earn-admin-url').value,active:$('earn-admin-active').checked,termsApproved:$('earn-admin-approved').checked})});e.target.reset();await refresh();}catch(x){alert(x.message);}});
