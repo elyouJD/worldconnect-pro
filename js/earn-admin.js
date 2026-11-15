@@ -25,7 +25,11 @@ async function refresh(){
    finance.className='earn-summary';
    status.insertAdjacentElement('afterend',finance);
   }
-  const f=data.financials||{};
+  const f=data.financials||{}, pw=data.platformWallet||{};
+  if($('platform-available')) $('platform-available').textContent=money(pw.availableCents);
+  if($('platform-pending')) $('platform-pending').textContent=money(pw.pendingWithdrawCents);
+  if($('platform-total')) $('platform-total').textContent=money(pw.totalEarnedCents);
+  if($('platform-withdrawals')) $('platform-withdrawals').innerHTML=(data.platformWithdrawals||[]).map(w=>'<div class="earn-ledger-row"><span>'+money(w.amountCents)+' · '+esc(w.method)+' · '+esc(w.payoutDetails)+'</span><span><button class="outline" data-platform-withdraw="'+esc(w.id)+'" data-status="paid">Marcar pagada</button> <button class="outline" data-platform-withdraw="'+esc(w.id)+'" data-status="rejected">Rechazar</button></span></div>').join('')||'<p class="muted">No hay solicitudes pendientes.</p>';
   finance.innerHTML=[
    ['Comisiones netas',money(f.netCommissionCents)],
    ['Recompensas usuarios (60 %)',money(f.userShareCents)],
@@ -38,10 +42,24 @@ async function refresh(){
  }catch(e){status.textContent=e.message;}
 }
 $('earn-admin-offer-form')?.addEventListener('submit',async e=>{e.preventDefault();try{await api('/api/admin/offers',{method:'POST',body:JSON.stringify({title:$('earn-admin-title').value,description:$('earn-admin-description').value,network:$('earn-admin-network').value,url:$('earn-admin-url').value,active:$('earn-admin-active').checked,termsApproved:$('earn-admin-approved').checked})});e.target.reset();await refresh();}catch(x){alert(x.message);}});
+$('platform-withdraw-form')?.addEventListener('submit',async e=>{
+ e.preventDefault();
+ try{
+  const result=await api('/api/admin/platform-withdrawals',{method:'POST',body:JSON.stringify({
+   amountCents:Math.round(Number($('platform-withdraw-amount').value)*100),
+   method:$('platform-payout-method').value,
+   payoutDetails:$('platform-payout-details').value.trim()
+  })});
+  alert('Solicitud de retirada creada: '+result.id);
+  e.target.reset();
+  await refresh();
+ }catch(x){alert(x.message);}
+});
 $('earn-admin-commission-form')?.addEventListener('submit',async e=>{e.preventDefault();try{const result=await api('/api/admin/commissions',{method:'POST',body:JSON.stringify({uid:$('earn-admin-uid').value.trim(),externalId:$('earn-admin-external').value.trim(),netCommissionCents:Math.round(Number($('earn-admin-net').value)*100)})});alert('Acreditado '+money(result.creditedCents)+' al usuario; '+money(result.platformCents)+' para WorldConnect.');e.target.reset();}catch(x){alert(x.message);}});
 document.addEventListener('click',async e=>{
  const t=e.target.closest('[data-toggle-offer]'); if(t){try{await api('/api/admin/offers/'+encodeURIComponent(t.dataset.toggleOffer),{method:'PATCH',body:JSON.stringify({active:t.dataset.active==='true'})});await refresh();}catch(x){alert(x.message);}return;}
  const w=e.target.closest('[data-withdraw]'); if(w){if(!confirm('¿Confirmas que has realizado la transferencia antes de marcarla pagada?'))return;try{await api('/api/admin/withdrawals/'+encodeURIComponent(w.dataset.withdraw),{method:'PATCH',body:JSON.stringify({status:w.dataset.status})});await refresh();}catch(x){alert(x.message);}}
+ const pw=e.target.closest('[data-platform-withdraw]'); if(pw){if(pw.dataset.status==='paid'&&!confirm('Confirma que la transferencia de fondos de plataforma ya se ha completado.'))return;try{await api('/api/admin/platform-withdrawals/'+encodeURIComponent(pw.dataset.platformWithdraw),{method:'PATCH',body:JSON.stringify({status:pw.dataset.status})});await refresh();}catch(x){alert(x.message);}}
 });
 $('earn-admin-refresh')?.addEventListener('click',refresh);
 onAuthStateChanged(auth,user=>{if(user&&location.hash==='#admin')refresh();});
