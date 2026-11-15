@@ -1,0 +1,7 @@
+name = "worldconnect-earn-api-staging"
+main = "src/index.js"
+compatibility_date = "2026-11-13"
+workers_dev = true
+
+[vars]
+FIREBASE_PROJECT_ID = "worldconnect-staging"
