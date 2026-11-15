@@ -198,7 +198,7 @@ async function handle(request,env) {
     const writes=[
       {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/platformWithdrawalRequests/${id}`,fields:fields({amountCents:amount,method,payoutDetails:details,status:"pending",createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}},
       {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields({availableCents:available-amount,pendingWithdrawCents:Number(wallet.pendingWithdrawCents||0)+amount,updatedAt:now})},updateMask:{fieldPaths:["availableCents","pendingWithdrawCents","updatedAt"]},currentDocument:{updateTime:walletDoc.updateTime}},
-      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/platformLedger/platform_withdrawal_${id}`,fields:fields({amountCents:-amount,type:"platform_withdrawal_requested",description:"Reserva para retirada de fondos de plataforma",withdrawalId:id,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}}
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/platformLedger/platform_withdrawal_request_${id}`,fields:fields({amountCents:-amount,type:"platform_withdrawal_requested",description:"Reserva para retirada de fondos de plataforma",withdrawalId:id,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) return json(request,{error:"Platform balance changed or request conflicted. Refresh and try again."},409);
@@ -216,7 +216,7 @@ async function handle(request,env) {
     const rejected=x.status==="rejected";
     const walletFields={pendingWithdrawCents:pending-amount,updatedAt:now};
     if(rejected) walletFields.availableCents=Number(wallet.availableCents||0)+amount;
-    const ledgerId=`platform_withdrawal_${id}`;
+    const ledgerId=`platform_withdrawal_review_${id}`;
     const writes=[
       {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${ref}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:w.updateTime}},
       {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}},
