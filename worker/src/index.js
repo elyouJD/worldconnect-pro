@@ -8,7 +8,7 @@ const ALLOWED_ORIGINS = new Set([
 function corsHeaders(request) {
   const origin = request.headers.get("Origin") || "";
   const headers = { "Vary": "Origin", "Access-Control-Allow-Headers": "Authorization, Content-Type", "Access-Control-Allow-Methods": "GET, POST, PATCH, OPTIONS" };
-  if (ALLOWED_ORIGINS.has(origin)) headers["Access-Control-Allow-Origin"] = origin;
+  if (ALLOWED_ORIGINS.has(origin) || /^https:\/\/[a-z0-9-]+\.pages\.dev$/i.test(origin)) headers["Access-Control-Allow-Origin"] = origin;
   return headers;
 }
 const json = (request, data, status=200) => new Response(JSON.stringify(data), { status, headers: { ...corsHeaders(request), "Content-Type": "application/json", "Cache-Control": "no-store" } });
