@@ -1,0 +1,8 @@
+{
+  "name": "worldconnect-earn-api-staging",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "wrangler dev --local --port 8790", "deploy": "wrangler deploy" },
+  "devDependencies": { "wrangler": "^4.0.0" },
+  "dependencies": { "jose": "^6.0.0" }
+}
