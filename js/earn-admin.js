@@ -59,7 +59,19 @@ $('earn-admin-commission-form')?.addEventListener('submit',async e=>{e.preventDe
 document.addEventListener('click',async e=>{
  const t=e.target.closest('[data-toggle-offer]'); if(t){try{await api('/api/admin/offers/'+encodeURIComponent(t.dataset.toggleOffer),{method:'PATCH',body:JSON.stringify({active:t.dataset.active==='true'})});await refresh();}catch(x){alert(x.message);}return;}
  const w=e.target.closest('[data-withdraw][data-withdraw-action]'); if(w){const action=w.dataset.withdrawAction;if(action!=='paid'&&action!=='rejected')return;const message=action==='paid'?'¿Confirmas que has realizado la transferencia antes de marcarla pagada?':'¿Confirmas que deseas rechazar esta solicitud y devolver el importe al saldo disponible del usuario?';if(!confirm(message))return;try{await api('/api/admin/withdrawals/'+encodeURIComponent(w.dataset.withdraw),{method:'PATCH',body:JSON.stringify({status:action})});await refresh();}catch(x){alert(x.message);}return;}
- const pw=e.target.closest('[data-platform-withdraw][data-withdraw-action]'); if(pw){const action=pw.dataset.withdrawAction;if(action!=='paid'&&action!=='rejected')return;const message=action==='paid'?'Confirma que la transferencia de fondos de plataforma ya se ha completado.':'¿Confirmas que deseas rechazar esta solicitud de retirada de plataforma y devolver el importe al saldo disponible?';if(!confirm(message))return;try{await api('/api/admin/platform-withdrawals/'+encodeURIComponent(pw.dataset.platformWithdraw)+'/'+action,{method:'PATCH',body:JSON.stringify({status:action})});await refresh();}catch(x){alert(x.message);}}
+ const pw=e.target.closest('[data-platform-withdraw][data-withdraw-action]');
+ if(pw){
+  const action=pw.getAttribute('data-withdraw-action');
+  const id=pw.getAttribute('data-platform-withdraw');
+  if(!id || !['paid','rejected'].includes(action)) return;
+  const message=action==='paid'?'Confirma que la transferencia de fondos de plataforma ya se ha completado.':'¿Confirmas que deseas rechazar esta solicitud de retirada de plataforma y devolver el importe al saldo disponible?';
+  if(!confirm(message)) return;
+  try{
+   await api('/api/admin/platform-withdrawals/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({status:action})});
+   await refresh();
+  }catch(x){alert(x.message);}
+  return;
+ }
 });
 $('earn-admin-refresh')?.addEventListener('click',refresh);
 onAuthStateChanged(auth,user=>{if(user&&location.hash==='#admin')refresh();});
