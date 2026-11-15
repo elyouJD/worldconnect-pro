@@ -131,3 +131,26 @@ This is a first social-network release, not a full clone of Instagram, TikTok, F
 ## Fix comment permission error (v7)
 The comment-create rule now reads `commentsDisabled` with a default of `false`. This allows comments on older posts that do not yet have a `commentsDisabled` field, while still blocking comments when the post owner explicitly disables them.
 IMPORTANT: publish this updated `firestore.rules` in Firebase Console > Firestore Database > Rules before testing. The app bundle alone cannot change Firebase security rules.
+
+## Probar WorldConnect en el navegador (staging local)
+
+Esta forma sirve para probar la web en tu propio ordenador sin publicar nada y sin modificar Firebase Console ni Cloudflare.
+
+1. Clona la rama de pruebas:
+```powershell
+git clone -b staging/platform-wallet-sepa https://github.com/elyouJD/worldconnect-pro.git
+cd worldconnect-pro
+```
+2. Inicia un servidor local desde la carpeta raíz del proyecto:
+```powershell
+py -m http.server 8000
+```
+   Si `py` no está disponible, prueba `python -m http.server 8000`.
+3. Abre en Chrome o Edge: http://localhost:8000
+4. Para detener el servidor, vuelve a la terminal y pulsa `Ctrl+C`.
+
+La configuración actual de esta rama apunta al proyecto Firebase de staging y al Worker de staging ya configurados en el código. El servidor local usa el puerto 8000 porque ese origen está incluido en la lista CORS del Worker. No uses Live Server en su puerto predeterminado 5500 para probar las funciones de Earn Money, porque ese origen no está permitido actualmente.
+
+**Importante:** usa una cuenta de prueba y datos ficticios. La página de administración financiera solo aparece a cuentas que ya tengan el custom claim `admin: true`; no intentes asignarte permisos desde el navegador. Las retiradas son solicitudes manuales y no envían dinero. No uses IBAN, PayPal ni datos bancarios reales durante las pruebas.
+
+Esta guía no despliega el proyecto, no cambia reglas ni datos de Firebase y no modifica Cloudflare.
