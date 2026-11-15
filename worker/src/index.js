@@ -121,14 +121,16 @@ async function handle(request,env) {
   }
   const admin=await adminUser(request,env);
   if(request.method==="GET" && url.pathname==="/api/admin/summary") {
-    const [offers,withdrawals,commissions]=await Promise.all([listCollection(env,"affiliateOffers"),listCollection(env,"withdrawalRequests"),listCollection(env,"commissions")]);
+    const [offers,withdrawals,commissions,platformWithdrawals]=await Promise.all([listCollection(env,"affiliateOffers"),listCollection(env,"withdrawalRequests"),listCollection(env,"commissions"),listCollection(env,"platformWithdrawalRequests")]);
+    let platformWallet={availableCents:0,pendingWithdrawCents:0,totalEarnedCents:0};
+    try { platformWallet=decodeDoc(await dbRequest(env,"platformWallet/main")); } catch(e) { if(e.status!==404) throw e; }
     const financials=commissions.reduce((sum,c)=>({
       commissionCount:sum.commissionCount+1,
       netCommissionCents:sum.netCommissionCents+Number(c.netCommissionCents||0),
       userShareCents:sum.userShareCents+Number(c.userShareCents||0),
       platformShareCents:sum.platformShareCents+Number(c.platformShareCents||0)
     }),{commissionCount:0,netCommissionCents:0,userShareCents:0,platformShareCents:0});
-    return json(request,{offers,withdrawals:withdrawals.filter(x=>x.status==="pending"),financials});
+    return json(request,{offers,withdrawals:withdrawals.filter(x=>x.status==="pending"),platformWallet,platformWithdrawals:platformWithdrawals.filter(x=>x.status==="pending"),financials});
   }
   if(request.method==="POST" && url.pathname==="/api/admin/offers") {
     const x=await request.json();
@@ -165,14 +167,67 @@ async function handle(request,env) {
       update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields({availableCents:(wallet.availableCents||0)+share,pendingCents:wallet.pendingCents||0,totalEarnedCents:(wallet.totalEarnedCents||0)+share,updatedAt:now})},
       currentDocument: walletDoc ? {updateTime:walletDoc.updateTime} : {exists:false}
     };
+    const platformWalletPath="platformWallet/main";
+    let platformWalletDoc=null, platformWallet={availableCents:0,pendingWithdrawCents:0,totalEarnedCents:0};
+    try { platformWalletDoc=await dbRequest(env,platformWalletPath); platformWallet=decodeDoc(platformWalletDoc); } catch(e) { if(e.status!==404) throw e; }
+    const platformWalletWrite={
+      update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${platformWalletPath}`,fields:fields({availableCents:Number(platformWallet.availableCents||0)+platform,totalEarnedCents:Number(platformWallet.totalEarnedCents||0)+platform,pendingWithdrawCents:Number(platformWallet.pendingWithdrawCents||0),updatedAt:now})},
+      updateMask:{fieldPaths:["availableCents","totalEarnedCents","pendingWithdrawCents","updatedAt"]},
+      currentDocument:platformWalletDoc?{updateTime:platformWalletDoc.updateTime}:{exists:false}
+    };
     const writes=[
       {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${path}`,fields:fields({uid,externalId,netCommissionCents:net,userShareCents:share,platformShareCents:platform,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}},
       walletWrite,
-      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/walletLedger/${id}`,fields:fields({uid,amountCents:share,type:"affiliate_commission",description:"Comisión de afiliación confirmada",externalId,createdAt:now})},currentDocument:{exists:false}}
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/walletLedger/${id}`,fields:fields({uid,amountCents:share,type:"affiliate_commission",description:"Comisión de afiliación confirmada",externalId,createdAt:now})},currentDocument:{exists:false}},
+      platformWalletWrite,
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/platformLedger/${id}`,fields:fields({amountCents:platform,type:"commission_share",description:"40 % de comisión neta confirmada",commissionId:id,externalId,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) { const er=await commit.json().catch(()=>({})); return json(request,{error:er.error?.message||"Commission could not be recorded safely"},409); }
     return json(request,{creditedCents:share,platformCents:platform},201);
+  }
+  if(request.method==="POST" && url.pathname==="/api/admin/platform-withdrawals") {
+    const x=await request.json();
+    const amount=Number(x.amountCents), details=String(x.payoutDetails||"").trim();
+    if(!Number.isSafeInteger(amount)||amount<1000||amount>100000000||details.length<5||details.length>160) return json(request,{error:"Importe mínimo 10 EUR y datos bancarios válidos requeridos"},400);
+    const walletPath="platformWallet/main";
+    let walletDoc,wallet;
+    try { walletDoc=await dbRequest(env,walletPath); wallet=decodeDoc(walletDoc); } catch(e) { if(e.status===404) return json(request,{error:"Todavía no existe saldo disponible de la plataforma"},409); throw e; }
+    const available=Number(wallet.availableCents||0);
+    if(available<amount) return json(request,{error:"Saldo disponible insuficiente"},409);
+    const id=crypto.randomUUID(), now=new Date().toISOString();
+    const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+    const token=await googleAccessToken(env);
+    const writes=[
+      {update:{name:`${base}/platformWithdrawalRequests/${id}`,fields:fields({amountCents:amount,method:"bank",payoutDetails:details,status:"pending",createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}},
+      {update:{name:`${base}/${walletPath}`,fields:fields({availableCents:available-amount,pendingWithdrawCents:Number(wallet.pendingWithdrawCents||0)+amount,updatedAt:now})},updateMask:{fieldPaths:["availableCents","pendingWithdrawCents","updatedAt"]},currentDocument:{updateTime:walletDoc.updateTime}}
+    ];
+    const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
+    if(!commit.ok) return json(request,{error:"El saldo cambió o hubo un conflicto. Actualiza e inténtalo de nuevo."},409);
+    return json(request,{created:true,id,availableCents:available-amount},201);
+  }
+  if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/platform-withdrawals/")) {
+    const id=url.pathname.split("/").pop(), x=await request.json();
+    if(!/^[A-Za-z0-9_-]{1,120}$/.test(id)||!["paid","rejected"].includes(x.status)) return json(request,{error:"Solicitud o estado no válido"},400);
+    const requestPath=`platformWithdrawalRequests/${id}`, requestDoc=await dbRequest(env,requestPath), current=decodeDoc(requestDoc);
+    if(current.status!=="pending") return json(request,{error:"La solicitud ya no está pendiente"},409);
+    const walletPath="platformWallet/main", walletDoc=await dbRequest(env,walletPath), wallet=decodeDoc(walletDoc);
+    const amount=Number(current.amountCents||0), pending=Number(wallet.pendingWithdrawCents||0);
+    if(amount<1||pending<amount) return json(request,{error:"El saldo reservado no coincide; requiere revisión manual"},409);
+    const rejected=x.status==="rejected", now=new Date().toISOString();
+    const walletFields={pendingWithdrawCents:pending-amount,updatedAt:now};
+    if(rejected) walletFields.availableCents=Number(wallet.availableCents||0)+amount;
+    const ledgerId=`platform_withdrawal_${id}`;
+    const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
+    const token=await googleAccessToken(env);
+    const writes=[
+      {update:{name:`${base}/${requestPath}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:requestDoc.updateTime}},
+      {update:{name:`${base}/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}},
+      {update:{name:`${base}/platformLedger/${ledgerId}`,fields:fields({amountCents:rejected?amount:-amount,type:rejected?"platform_withdrawal_refund":"platform_withdrawal_paid",description:rejected?"Reembolso de retirada de plataforma rechazada":"Retirada de plataforma pagada manualmente",withdrawalId:id,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}}
+    ];
+    const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
+    if(!commit.ok) return json(request,{error:"La revisión entró en conflicto; actualiza e inténtalo de nuevo"},409);
+    return json(request,{updated:true,status:x.status});
   }
   if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/withdrawals/")) {
     const id=url.pathname.split("/").pop(), x=await request.json();
