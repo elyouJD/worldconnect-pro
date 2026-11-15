@@ -1,0 +1,29 @@
+name: WorldConnect staging Worker tests
+
+on:
+  push:
+    branches:
+      - fix/firebase-environment-isolation
+    paths:
+      - "worker-staging/worker/**"
+      - ".github/workflows/staging-worker-tests.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "worker-staging/worker/**"
+      - ".github/workflows/staging-worker-tests.yml"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: worker-staging/worker
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install
+      - run: npm test
