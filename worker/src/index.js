@@ -199,8 +199,8 @@ async function handle(request,env) {
     const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
     const token=await googleAccessToken(env);
     const writes=[
-      {update:{name:`${base}/platformWithdrawalRequests/${id}`,fields:fields({amountCents:amount,method:"bank",payoutDetails:details,status:"pending",createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}},
-      {update:{name:`${base}/${walletPath}`,fields:fields({availableCents:available-amount,pendingWithdrawCents:Number(wallet.pendingWithdrawCents||0)+amount,updatedAt:now})},updateMask:{fieldPaths:["availableCents","pendingWithdrawCents","updatedAt"]},currentDocument:{updateTime:walletDoc.updateTime}}
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/platformWithdrawalRequests/${id}`,fields:fields({amountCents:amount,method:"bank",payoutDetails:details,status:"pending",createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}},
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields({availableCents:available-amount,pendingWithdrawCents:Number(wallet.pendingWithdrawCents||0)+amount,updatedAt:now})},updateMask:{fieldPaths:["availableCents","pendingWithdrawCents","updatedAt"]},currentDocument:{updateTime:walletDoc.updateTime}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) return json(request,{error:"El saldo cambió o hubo un conflicto. Actualiza e inténtalo de nuevo."},409);
@@ -221,9 +221,9 @@ async function handle(request,env) {
     const base=`https://firestore.googleapis.com/v1/projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents`;
     const token=await googleAccessToken(env);
     const writes=[
-      {update:{name:`${base}/${requestPath}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:requestDoc.updateTime}},
-      {update:{name:`${base}/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}},
-      {update:{name:`${base}/platformLedger/${ledgerId}`,fields:fields({amountCents:rejected?amount:-amount,type:rejected?"platform_withdrawal_refund":"platform_withdrawal_paid",description:rejected?"Reembolso de retirada de plataforma rechazada":"Retirada de plataforma pagada manualmente",withdrawalId:id,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}}
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${requestPath}`,fields:fields({status:x.status,reviewedAt:now,reviewedBy:admin.sub})},updateMask:{fieldPaths:["status","reviewedAt","reviewedBy"]},currentDocument:{updateTime:requestDoc.updateTime}},
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/${walletPath}`,fields:fields(walletFields)},updateMask:{fieldPaths:Object.keys(walletFields)},currentDocument:{updateTime:walletDoc.updateTime}},
+      {update:{name:`projects/${env.FIREBASE_PROJECT_ID}/databases/(default)/documents/platformLedger/${ledgerId}`,fields:fields({amountCents:rejected?amount:-amount,type:rejected?"platform_withdrawal_refund":"platform_withdrawal_paid",description:rejected?"Reembolso de retirada de plataforma rechazada":"Retirada de plataforma pagada manualmente",withdrawalId:id,createdAt:now,createdBy:admin.sub})},currentDocument:{exists:false}}
     ];
     const commit=await fetch(`${base}:commit`,{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({writes})});
     if(!commit.ok) return json(request,{error:"La revisión entró en conflicto; actualiza e inténtalo de nuevo"},409);
