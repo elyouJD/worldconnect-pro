@@ -1,5 +1,6 @@
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
 import { calculateCommissionSplit, isValidWithdrawalAmount } from "./finance.js";
+import { calculateCommissionSplit, isValidWithdrawalAmount } from "./finance.js";
 
 const FIREBASE_KEYS = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
 const ALLOWED_ORIGINS = new Set([
