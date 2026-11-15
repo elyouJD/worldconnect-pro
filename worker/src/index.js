@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify, SignJWT } from "jose";
+import { calculateCommissionSplit, isValidWithdrawalAmount } from "./finance.js";
 
 const FIREBASE_KEYS = createRemoteJWKSet(new URL("https://www.googleapis.com/service_accounts/v1/jwk/securetoken@system.gserviceaccount.com"));
 const ALLOWED_ORIGINS = new Set([
@@ -104,7 +105,7 @@ async function handle(request,env) {
     const user=await verifiedUser(request,env);
     const x=await request.json();
     const amount=Number(x.amountCents), method=String(x.method||""), details=String(x.payoutDetails||"").trim();
-    if(!Number.isSafeInteger(amount) || amount<1000 || amount>100000000 || !["bank","paypal"].includes(method) || details.length<5 || details.length>160) return json(request,{error:"Valid amount (minimum 10 EUR), payout method and details are required"},400);
+    if(!isValidWithdrawalAmount(amount) || !["bank","paypal"].includes(method) || details.length<5 || details.length>160) return json(request,{error:"Valid amount (minimum 10 EUR), payout method and details are required"},400);
     const walletPath=`wallets/${user.sub}`, walletDoc=await dbRequest(env,walletPath), wallet=decodeDoc(walletDoc);
     const available=Number(wallet.availableCents||0);
     if(available<amount) return json(request,{error:"Insufficient available balance"},409);
@@ -157,7 +158,7 @@ async function handle(request,env) {
     const path=`commissions/${id}`;
     try { await dbRequest(env,path,{method:"GET"}); return json(request,{error:"This commission reference was already processed"},409); }
     catch(e) { if(e.status!==404) throw e; }
-    const share=Math.floor(net*0.60), platform=net-share, walletPath=`wallets/${uid}`;
+    const {userShareCents:share,platformShareCents:platform}=calculateCommissionSplit(net), walletPath=`wallets/${uid}`;
     let walletDoc=null, wallet={availableCents:0,pendingCents:0,totalEarnedCents:0};
     try { walletDoc=await dbRequest(env,walletPath); wallet=decodeDoc(walletDoc); } catch(e) { if(e.status!==404) throw e; }
     const now=new Date().toISOString();
@@ -189,7 +190,7 @@ async function handle(request,env) {
   if(request.method==="POST" && url.pathname==="/api/admin/platform-withdrawals") {
     const x=await request.json();
     const amount=Number(x.amountCents), details=String(x.payoutDetails||"").trim();
-    if(!Number.isSafeInteger(amount)||amount<1000||amount>100000000||details.length<5||details.length>160) return json(request,{error:"Importe mínimo 10 EUR y datos bancarios válidos requeridos"},400);
+    if(!isValidWithdrawalAmount(amount)||details.length<5||details.length>160) return json(request,{error:"Importe mínimo 10 EUR y datos bancarios válidos requeridos"},400);
     const walletPath="platformWallet/main";
     let walletDoc,wallet;
     try { walletDoc=await dbRequest(env,walletPath); wallet=decodeDoc(walletDoc); } catch(e) { if(e.status===404) return json(request,{error:"Todavía no existe saldo disponible de la plataforma"},409); throw e; }
