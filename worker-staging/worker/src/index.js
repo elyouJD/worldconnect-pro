@@ -216,7 +216,7 @@ async function handle(request,env) {
   }
   if(request.method==="PATCH" && url.pathname.startsWith("/api/admin/platform-withdrawals/")) {
     const id=url.pathname.split("/").pop(), x=await request.json();
-    const status=String(x.status||x.action||"").trim().toLowerCase();
+    const status=String(x.status||x.action||url.searchParams.get("status")||"").trim().toLowerCase();
     if(!/^[A-Za-z0-9_-]{1,120}$/.test(id) || !["paid","rejected"].includes(status)) return json(request,{error:"Invalid platform withdrawal request id or status",details:{validId:/^[A-Za-z0-9_-]{1,120}$/.test(id),receivedStatus:status||null}},400);
     const ref=`platformWithdrawalRequests/${id}`, w=await dbRequest(env,ref), current=decodeDoc(w);
     if(current.status!=="pending") return json(request,{error:"Platform withdrawal is no longer pending"},409);
