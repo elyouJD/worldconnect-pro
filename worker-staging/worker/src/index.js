@@ -37,6 +37,16 @@ function fromFirestore(v) {
 }
 function decodeDoc(d) { return Object.fromEntries(Object.entries(d.fields||{}).map(([k,v])=>[k,fromFirestore(v)])); }
 function fields(obj) { return Object.fromEntries(Object.entries(obj).map(([k,v])=>[k,firestoreValue(v)])); }
+export function splitCommission(netCommissionCents) {
+  if (!Number.isSafeInteger(netCommissionCents) || netCommissionCents < 1) {
+    throw new TypeError("netCommissionCents must be a positive safe integer");
+  }
+  const userShareCents = Math.floor(netCommissionCents * 0.60);
+  return {
+    userShareCents,
+    platformShareCents: netCommissionCents - userShareCents
+  };
+}
 async function googleAccessToken(env) {
   const now = Math.floor(Date.now()/1000);
   const pem = env.GOOGLE_PRIVATE_KEY.replace(/\\n/g,"\n").replace(/-----BEGIN PRIVATE KEY-----|-----END PRIVATE KEY-----|\s/g,"");
@@ -157,7 +167,7 @@ async function handle(request,env) {
     const path=`commissions/${id}`;
     try { await dbRequest(env,path,{method:"GET"}); return json(request,{error:"This commission reference was already processed"},409); }
     catch(e) { if(e.status!==404) throw e; }
-    const share=Math.floor(net*0.60), platform=net-share, walletPath=`wallets/${uid}`, platformWalletPath="platformWallet/main";
+    const {userShareCents:share,platformShareCents:platform}=splitCommission(net), walletPath=`wallets/${uid}`, platformWalletPath="platformWallet/main";
     let walletDoc=null, wallet={availableCents:0,pendingCents:0,totalEarnedCents:0};
     try { walletDoc=await dbRequest(env,walletPath); wallet=decodeDoc(walletDoc); } catch(e) { if(e.status!==404) throw e; }
     let platformWalletDoc=null, platformWallet={availableCents:0,pendingWithdrawCents:0,totalEarnedCents:0};
