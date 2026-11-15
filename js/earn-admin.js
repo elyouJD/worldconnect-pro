@@ -67,7 +67,7 @@ document.addEventListener('click',async e=>{
   const message=action==='paid'?'Confirma que la transferencia de fondos de plataforma ya se ha completado.':'¿Confirmas que deseas rechazar esta solicitud de retirada de plataforma y devolver el importe al saldo disponible?';
   if(!confirm(message)) return;
   try{
-   await api('/api/admin/platform-withdrawals/'+encodeURIComponent(id),{method:'PATCH',body:JSON.stringify({status:action})});
+   await api('/api/admin/platform-withdrawals/'+encodeURIComponent(id)+'/'+action,{method:'PATCH',body:JSON.stringify({status:action})});
    await refresh();
   }catch(x){alert(x.message);}
   return;
